@@ -8,7 +8,7 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Service for managing a depth charts of players for a given position
+ * Service for managing a depth charts of players.
  */
 public interface DepthChartService {
 

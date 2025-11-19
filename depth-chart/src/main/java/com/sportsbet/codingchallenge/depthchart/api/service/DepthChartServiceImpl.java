@@ -17,7 +17,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * Implementation of service for managing a depth charts of players for a given position
+ * Implementation of service for managing a depth charts of players.
  */
 
 @Service
@@ -41,11 +41,73 @@ public class DepthChartServiceImpl implements DepthChartService {
         //Assumption 1 -> If the player is not found in the database the exception is thrown
         Player player = retrievePlayer(depthChartDTO.player().playerName(), depthChartDTO.player().uniqueTeamNumber());
 
-        //Assuming that already added player for a position
-        // is requested  to be added for the same position again - should not be created and an exception is thrown
+        //Assumption 2 -> if the player is already exist for a position and have been
+        // requested again to be added for the same position then it should not be created and an exception is thrown.
         List<DepthChart> depthChartList = depthChartRepository.findByPosition(depthChartDTO.position());
 
        //check if the player is already added to the given position
+        verifyPlayerDuplicacyAtGivenPosition(depthChartList, player);
+
+        //When the position depth is missing in the request put the player at the end
+        Integer positionDepth = getPositionDepth(depthChartDTO, depthChartList);
+
+        //get the depth charts with the position depths move down if the new player is added somewhere in between of the depths
+        List<DepthChart> depthChartList1 = getDepthCharts(depthChartList, positionDepth);
+
+        depthChart.setPlayer(player);
+        depthChart.setPositionDepth(positionDepth);
+        depthChart.setPosition(depthChartDTO.position());
+        var savedDepthChart = depthChartRepository.save(depthChart);
+
+        if(!depthChartList1.isEmpty()){
+            depthChartRepository.saveAll(depthChartList1);
+        }
+
+        return mapToDepthChartDTO(savedDepthChart);
+    }
+
+    /**
+     * Calculate position depths to move down if the new player is added somewhere in between the depths
+     * @param depthChartList
+     * @param positionDepth
+     * @return depth charts with updated position depths
+     */
+    private static List<DepthChart> getDepthCharts(List<DepthChart> depthChartList, Integer positionDepth) {
+        //as per the requirement all the players move down after the given position_depth
+        List<DepthChart> depthChartList1 = depthChartList.stream()
+                .filter(dcd -> dcd.getPositionDepth() >= positionDepth)//move down only if the player is inserted in the between the position depth
+                .peek(dcd->dcd.setPositionDepth(dcd.getPositionDepth()+1))
+                .toList();
+        return depthChartList1;
+    }
+
+    /**
+     * Calculate the positionDepth
+     * @param depthChartDTO
+     * @param depthChartList
+     * @return
+     */
+    private static Integer getPositionDepth(DepthChartDTO depthChartDTO, List<DepthChart> depthChartList) {
+        Integer positionDepth;
+        if(depthChartDTO.positionDepth() == null){
+            log.info("Position Depth is missing in the input at position: {}", depthChartDTO.position());
+            //get the max or 0
+            positionDepth = depthChartList.stream()
+                        .mapToInt(DepthChart::getPositionDepth)
+                        .max().orElse(-1)+1;
+
+        } else {
+            positionDepth = depthChartDTO.positionDepth();
+        }
+        return positionDepth;
+    }
+
+    /**
+     * Verify if the player is already added in the given position
+     * @param depthChartList
+     * @param player
+     */
+    private void verifyPlayerDuplicacyAtGivenPosition(List<DepthChart> depthChartList, Player player) {
         DepthChart depthChart2 = depthChartList.stream()
                         .filter(
                                 dc->(
@@ -58,38 +120,6 @@ public class DepthChartServiceImpl implements DepthChartService {
                     , player.getPlayerName(), depthChart2.getPosition());
            throw new DepthChartCreationException("Player : " + player.getPlayerName() + " has already been created in the depth chart");
         }
-
-        /*
-          When the position depth is missing in the request put the player at the end
-         */
-        Integer positionDepth;
-        if(depthChartDTO.positionDepth() == null){
-            log.info("Position Depth is missing in the input at position: {}", depthChartDTO.position());
-            //get the max or 1
-            positionDepth = depthChartList.stream()
-                        .mapToInt(DepthChart::getPositionDepth)
-                        .max().orElse(-1)+1;
-
-        } else {
-            positionDepth = depthChartDTO.positionDepth();
-        }
-
-        //as per the requirement all the players move down after the given position_depth
-        List<DepthChart> depthChartList1 = depthChartList.stream()
-                .filter(dcd -> dcd.getPositionDepth() >= positionDepth)//move down only if the player is inserted in the between the position depth
-                .peek(dcd->dcd.setPositionDepth(dcd.getPositionDepth()+1))
-                .toList();
-
-        depthChart.setPlayer(player);
-        depthChart.setPositionDepth(positionDepth);
-        depthChart.setPosition(depthChartDTO.position());
-        var savedDepthChart = depthChartRepository.save(depthChart);
-
-        if(!depthChartList1.isEmpty()){
-            depthChartRepository.saveAll(depthChartList1);
-        }
-
-        return mapToDepthChartDTO(savedDepthChart);
     }
 
     /**
@@ -145,8 +175,6 @@ public class DepthChartServiceImpl implements DepthChartService {
                                  depthChart.getPosition(),
                                  depthChart.getPositionDepth(),
                                  mapToPLayerDTO(depthChart));
-
-
     }
 
     /**
@@ -155,7 +183,7 @@ public class DepthChartServiceImpl implements DepthChartService {
      */
     public Map<String,List<PlayerDTO>> retrieveFullDepthChart() {
 
-        log.info("Retrieving full depth chart data");
+        log.debug("Retrieving full depth chart data");
 
         List<DepthChart> depthChartList = depthChartRepository.findAll();
         return depthChartList.stream()

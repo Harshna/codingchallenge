@@ -18,8 +18,8 @@ import java.util.Map;
 @Slf4j
 public class DepthChartController {
 
-
     private DepthChartService depthChartService;
+
     public DepthChartController(DepthChartService depthChartService) {
         this.depthChartService = depthChartService;
     }
@@ -28,7 +28,7 @@ public class DepthChartController {
     @PostMapping
     @Operation(summary="Create a Depth Chart for a player on a position")
     public ResponseEntity<DepthChartDTO> createDepthChartData(@Valid @RequestBody DepthChartDTO depthChartDTO) {
-        log.info("Received request to create depth chart data");
+        log.debug("Creating depth chart data with request : {}", depthChartDTO);
         DepthChartDTO savedDepthChartDTO = this.depthChartService.createDepthChartData(depthChartDTO);
 
         return ResponseEntity
